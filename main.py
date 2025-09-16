@@ -74,16 +74,12 @@
 #         return {"data": event}
 #     raise HTTPException(status_code=404, detail="Event not found")
 
-from fastapi import FastAPI, Form, File, UploadFile, HTTPException # form, file and uploaded file added for form data
-from db import events_collection
-from pydantic import BaseModel
-from bson.objectid import ObjectId
 
-from utils import replace_mongo_id
-from typing import Annotated  # Annotated added for form data
+
+from fastapi import FastAPI # form, file and uploaded file added for form data
+from routes.events import events_router
 
 import cloudinary
-import cloudinary.uploader
 
 #configure cloudinary
 cloudinary.config(
@@ -94,9 +90,9 @@ cloudinary.config(
 
 
 
-class EventModel(BaseModel):
-    title: str
-    description: str
+# class EventModel(BaseModel):
+#     title: str
+#     description: str
 
 
 app = FastAPI()
@@ -106,90 +102,7 @@ app = FastAPI()
 def get_home():
     return {"message": "You are on the home page"}
 
-
-# Events endpoints
-@app.get("/events")
-def get_events(title="", description ="", limit = 10, skip = 0):  # Updated, title and description added
-    """Retrieve all events from the database."""
-    # Get all events from database
-    
-    events = events_collection.find(
-        filter={
-            "$or": [
-                {"title": {"$regex": title, "$options": "i"}}, # title filter added
-                {"description": {"$regex": description, "$options": "i"}} # description filter added
-            ]
-        },
-        limit = int(limit),
-        skip = int(skip)
-    ).to_list()  # Updated, filter for title and descriptions added to find()
-    # retrun data
-    return {"data": list(map(replace_mongo_id, events))}
+#include routers
+app.include_router(events_router)
 
 
-@app.post("/events")
-def post_event(
-        title: Annotated[str, Form()], # Updated, form data handling added
-        description: Annotated[str, Form()], # Updated, form data handling added
-        flyer: Annotated[UploadFile, File()]): # Updated, file handling added
-    #upload flyer cloundinary to get a url
-    upload_result = cloudinary.uploader.upload(flyer.file)
-    # print(upload_result)
-    # Insert event into database
-    events_collection.insert_one({
-        "title": title,
-        "description": description,
-        "flyer": upload_result["secure_url"]
-        })
-    # # Return response
-    return {"message": "Event added successfully"}
-
-
-@app.get("/events/{event_id}")
-def get_event_by_id(event_id):
-    # Get event from database by id
-    
-    event = events_collection.find_one({"_id": ObjectId(event_id)})
-    # Return response
-    if event:
-        event["id"] = str(event["_id"])
-        del event["_id"]
-        return {"data": event}
-    raise HTTPException(status_code=404, detail="Event not found")
-
-
-@app.put("/events/{event_id}")
-def replace_event(event_id,
-    title: Annotated[str, Form()], # Updated, form data handling added
-    description: Annotated[str, Form()], 
-    flyer: Annotated[UploadFile, File()]):
-    # check if event_id is valid mongo id
-    # upload flyer cloundinary to get a url
-    upload_result = cloudinary.uploader.upload(flyer.file)
- # replace event in database
-    events_collection.replace_one(
-            filter={"_id":ObjectId(event_id)},
-            replacement={
-                "title":title.title,
-                "description": description,
-                "flyer": upload_result["secure_url"],
-            },
-        )
-    # return response
-    return {"message": " Event replaced successfully"}
-
-from fastapi import status
-
-@app.delete("/events/{event_id}")
-def delete_event(event_id):
-    # check if event_id is valid mongo id
-    if not ObjectId.is_valid(event_id):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid Mongo ID received")
-    # delete event from database
-    delete_result = events_collection.delete_one(filter={"_id": ObjectId(event_id)})
-    if not delete_result.deleted_count:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No event found to delete")
-
-    #return response
-
-    return{"Message":"Event deleted successfully"}
