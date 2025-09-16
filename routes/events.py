@@ -1,12 +1,14 @@
-from fastapi import Form, File, UploadFile, HTTPException, APIRouter # form, file and uploaded file added for form data
+from fastapi import Form, File, UploadFile, HTTPException,status, APIRouter, Depends # form, file and uploaded file added for form data
 from db import events_collection
 from bson.objectid import ObjectId
-
 from utils import replace_mongo_id
 from typing import Annotated  # Annotated added for form data
-
 import cloudinary
 import cloudinary.uploader
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+
+
 
 #create users router
 events_router = APIRouter()
@@ -35,7 +37,12 @@ def get_events(title="", description ="", limit = 10, skip = 0):  # Updated, tit
 def post_event(
         title: Annotated[str, Form()], # Updated, form data handling added
         description: Annotated[str, Form()], # Updated, form data handling added
-        flyer: Annotated[UploadFile, File()]): # Updated, file handling added
+        flyer: Annotated[UploadFile, File()],
+        credintials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
+        ):
+    print (credintials)
+     # Updated, file handling added
+
     #upload flyer cloundinary to get a url
     upload_result = cloudinary.uploader.upload(flyer.file)
     # print(upload_result)
