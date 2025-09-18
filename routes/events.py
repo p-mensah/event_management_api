@@ -6,7 +6,7 @@ from typing import Annotated  # Annotated added for form data
 import cloudinary
 import cloudinary.uploader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
+from dependencies.authn import authenticated
 
 
 
@@ -38,9 +38,16 @@ def post_event(
         title: Annotated[str, Form()], # Updated, form data handling added
         description: Annotated[str, Form()], # Updated, form data handling added
         flyer: Annotated[UploadFile, File()],
-        credintials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
+        # credintials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
+        user_id = Annotated[str, Depends(authenticated)]
         ):
-    print (credintials)
+    # ensure an event with a title and user_id combined does nor exist
+    events_count = events_collection.count_documents(filter={
+"$and": [
+    {"title": title},
+    {"owner":  ObjectId(user_id)]}) 
+    if events_count > 0:
+          raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Event with {title} and {user_id} already exists")  # print (credintials)
      # Updated, file handling added
 
     #upload flyer cloundinary to get a url
@@ -50,7 +57,8 @@ def post_event(
     events_collection.insert_one({
         "title": title,
         "description": description,
-        "flyer": upload_result["secure_url"]
+        "flyer": upload_result["secure_url"],
+        "owner": user_id
         })
     # # Return response
     return {"message": "Event added successfully"}
@@ -91,8 +99,8 @@ def replace_event(event_id,
 
 from fastapi import status
 
-@events_router.delete("/events/{event_id}")
-def delete_event(event_id):
+@events_router.delete("/events/{event_id}") #  dependencies = [Depends{is_authenticated}])
+def delete_event(event_id, user_id, Annotated [str, Depends{is_authenticated}]):
     # check if event_id is valid mongo id
     if not ObjectId.is_valid(event_id):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid Mongo ID received")

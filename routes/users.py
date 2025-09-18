@@ -6,6 +6,12 @@ from typing import Annotated
 from db import users_collection 
 import jwt
 import bcrypt
+from datetime import datetime, timezone, timedelta
+
+
+
+
+
 #create users router
 users_router = APIRouter()
 
@@ -51,7 +57,9 @@ def login_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect password")
     
     # generate for them an access token
-    encoded_jwt = jwt.encode({"id": str(user["_id"])}, os.getenv("JWT_SECRET_KEY"), algorithm="HS256")
+    encoded_jwt = jwt.encode ({"id": str(user["_id"])}, 
+    "exp": datetime.now(tz = timezone.utc) + timedelta(seconds = 60)
+    }, os.getenv("JWT_SECRET_KEY"), algorithm=("HS256")
     
     # return response
     return { "message": "User logged in successfully","access_token": encoded_jwt}
