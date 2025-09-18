@@ -6,7 +6,7 @@ from typing import Annotated  # Annotated added for form data
 import cloudinary
 import cloudinary.uploader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from dependencies.authn import authenticated
+from dependencies.authn import is_authenticated
 
 
 
@@ -39,13 +39,14 @@ def post_event(
         description: Annotated[str, Form()], # Updated, form data handling added
         flyer: Annotated[UploadFile, File()],
         # credintials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
-        user_id = Annotated[str, Depends(authenticated)]
+        user_id = Annotated[str, Depends(is_authenticated)]
         ):
     # ensure an event with a title and user_id combined does nor exist
     events_count = events_collection.count_documents(filter={
 "$and": [
     {"title": title},
-    {"owner":  ObjectId(user_id)]}) 
+    {"owner":  ObjectId(user_id)}
+]})
     if events_count > 0:
           raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Event with {title} and {user_id} already exists")  # print (credintials)
      # Updated, file handling added
@@ -99,16 +100,24 @@ def replace_event(event_id,
 
 from fastapi import status
 
-@events_router.delete("/events/{event_id}") #  dependencies = [Depends{is_authenticated}])
-def delete_event(event_id, user_id, Annotated [str, Depends{is_authenticated}]):
+@events_router.delete("/events/{event_id}", dependencies=[Depends(is_authenticated)])
+def delete_event(event_id: str, user_id: Annotated[str, Depends(is_authenticated)]) -> dict:
     # check if event_id is valid mongo id
     if not ObjectId.is_valid(event_id):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid Mongo ID received")
+
+    # Check if the event exists and if the authenticated user is the owner
+    event = events_collection.find_one({"_id": ObjectId(event_id)})
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No event found to delete")
+
+    if str(event["owner"]) != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to delete this event")
+
     # delete event from database
     delete_result = events_collection.delete_one(filter={"_id": ObjectId(event_id)})
     if not delete_result.deleted_count:
+        # This case should ideally not be reached if the event was found above, but good for robustness
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No event found to delete")
 
-    #return response
-
-    return{"Message":"Event deleted successfully"}
+    return {"Message": "Event deleted successfully"}
